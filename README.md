@@ -16,7 +16,7 @@ when combined with a custom tool that translates between the formats.
 You must have a recent version of nodejs installed to use it. It was
 developed with node v19.7.0.
 
-You must also have the 'atob' and 'password-prompt' npm packages
+You must also have the `atob` and `password-prompt` npm packages
 installed.
 
 Here is a simple example that shows how to decrypt a PAM generated
