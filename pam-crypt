@@ -1,0 +1,579 @@
+#!/usr/bin/env node
+// Author:    Joe Linoff
+// Copyright: 2023
+// License:   MIT Open Source
+//
+// PAM encryption/decryption tool written nodejs to allow
+// it to use the same implementation as the web app.
+//
+// Requires nodejs 19.7 or later.
+//
+// To get information about pam-crypt usage type:
+//    % pam-crypt -h
+//    % pam-crypt --help
+global.VERSION = '1.0.0'
+var fs = require('fs')
+
+// ================================================================
+// console help
+// ================================================================
+function help() {
+    console.info(`
+NAME
+\tpam-crypt - encrypt/decrypt a PAM file from the command line
+
+SYNOPSIS
+\tpam-crypt [OPTIONS] [FILE]
+
+DESCRIPTION
+\tpam-crypt is a node JS tool that will encrypt or decrypt a PAM text
+\tbased database file or any other text file from the command line
+\tusing the same algorithm that is used by PAM (AES-256-CBC).
+
+\tIt can be used to analyze the contents of the PAM database using
+\tcustom tools to understand characteristics of the account data.
+\tFor example you could use it to determine how many times a password
+\tor username is duplicated.
+
+\tIt can also be used to facilitate record transfers to and from PAM
+\twhen combined with a custom tool that translates between the formats.
+
+\tYou must have a recent version of nodejs installed to use it. It was
+\tdeveloped with node v19.7.0.
+
+\tYou must also have the 'atob' and 'password-prompt' npm packages
+\tinstalled.
+
+OPTIONS
+\t-h, -help
+\t\tDisplay the help on the console and exit.
+
+\t-d, --decrypt
+\t\tDecrypt the PAM file.
+
+\t-e, --encrypt
+\t\tEncrypt the PAM file.
+
+\t-f, --force
+\t\tForce output file to be overwritten if it exists.
+
+\t-i FILE, --in FILE
+\t\tInput file. The default is stdin.
+\t\tThis will be the input PAM file for -d.
+
+\t-o FILE, --out FILE
+\t\tOutput file. The default is stdout.
+\t\tThis will be the output PAM file for -e.
+
+\t-p FILE, --password-file FILE
+\t\tA file that contains the master pasword.
+
+\t-P PASSWORD, --password PASSWORD
+\t\tThe master password. It is not a good idea to
+\t\tuse this on the command line because the
+\t\tpassword will show up in the shell history.
+
+\t-v, --verbose
+\t\tIncrease the verbosity of the program status output.
+\t\tThe following are also accepted: -vv and -vvv
+
+\t-V, --version
+\t\tDisplay the program version and exit
+
+EXAMPLES
+\tGet help.
+\t\tpam-crypt -h
+
+\tGet version.
+\t\tpam-crypt --version
+
+\tDecrypt a PAM file.
+\t\tpam-crypt -d -p secret -i mystuff.pam -o data.js
+
+\tEncrypt a JSON (PAM formatted) file.
+\t\tpam-crypt -e -p secret -i data.js -o newstuff.pam
+
+AUTHOR
+\tWritten by Joe Linoff for the PAM project.
+
+COPYRIGHT
+\tCopyright (c) 2023 by Joe Linoff, MIT License.
+
+SEE ALSO
+\tThe PAM project: https://github.com/jlinoff/pam-crypt.
+`)
+}
+
+// ================================================================
+// Add line numbers to console.log output.
+// use console.info for output with no line numbers.
+// https://stackoverflow.com/questions/45395369/how-to-get-console-log-line-numbers-shown-in-nodejs
+// ================================================================
+const path = require('path');
+['debug', 'log', 'warn', 'error'].forEach((methodName) => {
+    const originalLoggingMethod = console[methodName];
+    console[methodName] = (firstArgument, ...otherArguments) => {
+        const originalPrepareStackTrace = Error.prepareStackTrace;
+        Error.prepareStackTrace = (_, stack) => stack;
+        const callee = new Error().stack[1];
+        Error.prepareStackTrace = originalPrepareStackTrace;
+        const relativeFileName = path.relative(process.cwd(), callee.getFileName());
+        const lineno = callee.getLineNumber().toString().padStart(4, ' ')
+        const prefix = `${relativeFileName}:${lineno}:`;
+        //const prefix = `${relativeFileName}:${callee.getLineNumber()}:`;
+        if (typeof firstArgument === 'string') {
+            originalLoggingMethod(prefix + ' ' + firstArgument, ...otherArguments);
+        } else {
+            originalLoggingMethod(prefix, firstArgument, ...otherArguments);
+        }
+    };
+});
+
+// ================================================================
+// command line options
+// ================================================================
+globalThis.options = {
+    decrypt: false,
+    encrypt: false,
+    force: false,
+    ifn: 'stdin',
+    ofn: 'stdout',
+    password: '',
+    verbose: 0,
+}
+
+function normalizeOptions() {
+    let args = []
+    let i = 0
+    while(i < process.argv.length) {
+        let val = process.argv[i]
+        // process grouped entries like -iop <in> <out> <password> ==> -i <in> -o <out> -p <password>
+        if (val.length > 2 && val[0] === '-' && val[1] !== '-') {
+            for(let k=1; k<val.length; k++) {
+                let opt = '-' + val[k] // new option
+                switch(opt) {
+                case '-i':
+                case '-o':
+                case '-p':
+                case '-P':
+                    args.push(opt)
+                    i += 1
+                    args.push(process.argv[i])
+                    break
+                default:
+                    args.push(opt)
+                    break
+                }
+            }
+        } else {
+            args.push(val)
+        }
+        i++
+    }
+    return args
+}
+
+function getOptions() {
+    let inFile = ''
+    let passwordPrompt = true
+    let argv = normalizeOptions()
+    for(let index = 0; index < argv.length; index++) {
+        let val = argv[index]
+        //argv.forEach((val, index) => {
+        //console.log(`option: ${index}: "${val}"`);
+        let j = index + 1
+        if (index > 1) { // skipArg [0] == node and [1] == program
+            if ((index+1) === argv.length) {
+                options.input = val
+            }
+            switch(val) {
+            case "-d":
+            case "--decrypt":
+                options.decrypt = true
+                break
+            case "-e":
+            case "--encrypt":
+                options.encrypt = true
+                break
+            case "-h":
+            case "--help":
+                help()
+                process.exit(0)
+                break
+            case "-f":
+            case "--force":
+                options.force = true
+                break
+            case "-i":
+            case "-in":
+                if (j >= argv.length) {
+                    console.error(`ERROR: missing FILE option for '${val}'.`)
+                    process.exit(1)
+                }
+                if (argv[j][0] === '-') {
+                    console.error(`ERROR: missing FILE option for '${val}'.`)
+                    process.exit(1)
+                }
+                options.ifn = argv[j]
+                index += 1
+                break
+            case "-o":
+            case "-out":
+                if (j >= argv.length) {
+                    console.error(`ERROR: missing FILE option for '${val}'.`)
+                    process.exit(1)
+                }
+                if (argv[j][0] === '-') {
+                    console.error(`ERROR: missing FILE option for '${val}'.`)
+                    process.exit(1)
+                }
+                options.ofn = argv[j]
+                index += 1
+                break
+            case "-P":
+            case "--password":
+                if (j >= argv.length) {
+                    console.error(`ERROR: missing PASSWORD option for '${val}'.`)
+                    process.exit(1)
+                }
+                options.password = argv[j]
+                index += 1
+                passwordPrompt = false
+                break
+            case "-p":
+            case "--password-file":
+                if (j >= argv.length) {
+                    console.error(`ERROR: missing FILE option for '${val}'.`)
+                    process.exit(1)
+                }
+                let passwordFile = argv[j]
+                if (!fs.existsSync(passwordFile)) {
+                    console.error(`ERROR: password FILE (${passwordFile}) does not exist for '${val}'. Did you want'-P'?`)
+                    process.exit(1)
+                }
+                try {
+                    options.password = fs.readFileSync(passwordFile, 'utf8').trim()
+                } catch (err) {
+                    console.error(`ERROR: ${err}`)
+		    process.exit(1)
+                }
+                index += 1
+                passwordPrompt = false
+                break
+            case "-v":
+            case "--verbose":
+                options.verbose += 1
+                break
+            case "-V":
+            case "--version":
+                console.info(`version: ${VERSION}`)
+                console.info(`nodejs:  ${process.version}`)
+                process.exit(0)
+                break
+            default:
+                if ((index+1) !== argv.length || val[0] === '-') {
+                    console.error(`ERROR: unrecognized option: '${val}'. Use -h to see all available options.`)
+                    process.exit(1)
+                }
+                break
+            }
+        }
+    }
+    if (options.encrypt && options.decrypt) {
+        console.error('ERROR: options -d and -e are mutually exclusive')
+        process.exit(1)
+    }
+    if (!options.decrypt && !options.encrypt) {
+        console.error(`ERROR: missing option: you must specify -e or -d.`)
+        process.exit(1)
+    }
+
+    if (passwordPrompt) {
+        let prompt = require('password-prompt')
+        options.password = prompt('password: ')
+    }
+
+    if (options.ofn !== "stdout") {
+        if (options.force === false) {
+            if (fs.existsSync(options.ofn)) {
+                console.error(`ERROR: output file "${options.ofn}" exists, to overwrite specify -f.`)
+                process.exit(1)
+            }
+        }
+    }
+    if (options.ifn !== "stdin") {
+        if (!fs.existsSync(options.ifn)) {
+            console.error(`ERROR: input file "${options.ifn}" does not exist.`)
+            process.exit(1)
+        }
+    }
+    if (options.verbose) {
+        let mode = options.decrypt ? 'decrypt (-d)' : 'encrypt (-e)'
+        console.log(`mode:      ${mode}`)
+        console.log(`input:     '${options.ifn}'`)
+        console.log(`output:    '${options.ofn}'`)
+        console.log(`verbosity: ${options.verbose}`)
+    }
+}
+
+// ================================================================
+// PAM encrypt/decrypt stuff from crypt.js.
+// ================================================================
+// wrappers
+var atob = require('atob');
+global.window = {
+    isSecureContext: true,
+    crypto: require('crypto'),
+}
+
+function statusBlip(msg) {
+    if (options.verbose > 1) {
+        console.log(`statusBlip: ${msg}`)
+    }
+}
+
+// https://stackoverflow.com/questions/40031688/javascript-arraybuffer-to-hex
+function buf2hex(buffer) { // buffer is an ArrayBuffer
+  return [...new Uint8Array(buffer)]
+      .map(x => x.toString(16).padStart(2, '0'))
+      .join('');
+}
+
+// https://dev.to/halan/4-ways-of-symmetric-cryptography-and-javascript-how-to-aes-with-javascript-3o1b
+const encoder = new TextEncoder()
+const decoder = new TextDecoder();
+
+const toBase64 = buffer => btoa(String.fromCharCode(...new Uint8Array(buffer)))
+const fromBase64 = buffer => Uint8Array.from(atob(buffer), c => c.charCodeAt(0))
+
+const PBKDF2 = async (password, salt, iterations, length, hash, algorithm = 'AES-CBC') => {
+        let keyMaterial = await window.crypto.subtle.importKey(
+            'raw',
+            encoder.encode(password),
+            {name: 'PBKDF2'},
+            false,
+            ['deriveKey']
+        );
+        return await window.crypto.subtle.deriveKey(
+            {
+                name: 'PBKDF2',
+                salt: encoder.encode(salt),
+                iterations,
+                hash
+            },
+            keyMaterial,
+            { name: algorithm, length },
+            false, // we don't need to export our key!!!
+            ['encrypt', 'decrypt']
+        );
+    }
+
+// Encrypt plaintext
+function encrypt(password, plaintext, filename, callback) {
+    if (!plaintext || plaintext.length === 0) {
+        callback(plaintext, filename)
+    }
+    if (!password || password.length === 0) {
+        callback(plaintext, filename) // write out in plaintext
+        return
+    }
+    let ciphertext = plaintext
+    if (window.isSecureContext) {
+        statusBlip(`encrypting ${plaintext.length}B...`)
+        // https://dev.to/halan/4-ways-of-symmetric-cryptography-and-javascript-how-to-aes-with-javascript-3o1b
+        const iv = window.crypto.getRandomValues(new Uint8Array(16))
+        const salt = window.crypto.getRandomValues(new Uint8Array(16))
+        const encoded_plaintext = encoder.encode(plaintext)
+        PBKDF2(password, salt, 100000, 256, 'SHA-256')
+            .then( (key) => {
+                if (options.verbose) {
+                    console.log('key', key)
+                }
+                window.crypto.subtle.encrypt(
+                    {name: 'AES-CBC', iv: iv }, key, encoded_plaintext)
+                    .then( (encrypted) => {
+                        if (options.verbose) {
+                            console.log('encrypted', encrypted)
+                        }
+                        //ciphertext = buf2hex(encrypted)
+                        ciphertext = toBase64([...salt, ...iv, ...new Uint8Array(encrypted)])
+                        statusBlip(`encrypted ${plaintext.length}B -> ${ciphertext.length}B ...`)
+                        callback(ciphertext, filename)
+                    })
+                    .catch( (error) => {
+                        console.log(error)
+                    })
+            })
+            .catch((error) => {
+                console.log(error)
+            })
+    } else {
+        statusBlip('encryption not enabled')
+    }
+}
+
+// Decrypt ciphertext.
+function decrypt(password, ciphertext, callback, callback2) {
+    if (!ciphertext || ciphertext.length === 0) {
+        callback(ciphertext)
+    }
+    if (!password || password.length === 0) {
+        // It is encrypted, we MUST have a password
+        callback2('No password specified\nPlease specify the password and try again')
+        return
+    }
+    let plaintext = ciphertext
+
+    if (window.isSecureContext) {
+        statusBlip(`decrypting ${ciphertext.length}B...`)
+        const salt_len = 16
+        const iv_len = 16
+        const encrypted = fromBase64(ciphertext)
+        const salt = encrypted.slice(0, salt_len)
+        const iv = encrypted.slice(0+salt_len, salt_len+iv_len)
+        const data = encrypted.slice(salt_len + iv_len)
+        if (options.verbose > 1) {
+            console.log(`ciphertext.length : ${ciphertext.length}`)
+            console.log(`encrypted.length  : ${encrypted.length}`)
+            console.log(`salt.length       : ${salt.length}`)
+            console.log(`iv.length         : ${iv.length}`)
+            console.log(`data.length       : ${data.length}`)
+        }
+        PBKDF2(password, salt, 100000, 256, 'SHA-256')
+            .then( (key) => {
+                if (options.verbose > 1) {
+                    console.log('key', key)
+                }
+                window.crypto.subtle.decrypt(
+                    {name: 'AES-CBC', iv: iv }, key, data)
+                    .then( (decrypted) => {
+                        if (options.verbose > 1) {
+                            console.log('decrypted', decrypted)
+                        }
+                        const base64 = decoder.decode(decrypted)
+                        plaintext = base64
+                        statusBlip(`decrypted ${ciphertext.length}B -> ${plaintext.length}B ...`)
+                        callback(plaintext)
+                    })
+                    .catch( (error) => {
+                        callback2(`Decryption failed!\n\tPlease try another password.\n\t${error}`)
+                        console.log(error)
+                    })
+            })
+            .catch((error) => {
+                callback2(`Decryption setup failed!\nPlease try another password.\n${error}`)
+            })
+        statusBlip(`decrypted ${ciphertext.length}B -> ${plaintext.length}B ...`)
+    } else {
+        statusBlip('decryption not enabled')
+    }
+}
+
+// ================================================================
+// Local encrypt/decrypt functions.
+// ================================================================
+function writeOutput(text) {
+    if (options.ofn.length === 0 || options.ofn !== 'stdout') {
+        try {
+            fs.writeFileSync(options.ofn, text)
+        } catch (err) {
+            console.error(`ERROR: ${err}`)
+            process.exit(1)
+        }
+    } else {
+        console.info(text)
+    }
+}
+
+function decryptPassed(plaintext) {
+    if (options.verbose) {
+        console.log('decrypt succeeded')
+        console.log(`plaintext is ${plaintext.length} bytes`)
+    }
+    writeOutput(plaintext)
+    if (options.verbose) {
+        console.log(`wrote plaintext to ${options.ofn}`)
+    }
+}
+
+function decryptFailed(msg) {
+    if (options.verbose) {
+        console.error(`ERROR: decrypt failed: ${msg}`)
+        process.exit(1)
+    }
+}
+
+function encryptPassed(ciphertext, filename) {
+    if (options.verbose) {
+        console.log('encrypt succeeded')
+        console.log(`ciphertext is ${ciphertext.length} bytes`)
+    }
+    writeOutput(ciphertext)
+    if (options.verbose) {
+        console.log(`wrote ciphertext to ${options.ofn}`)
+    }
+    if (options.ofn.length === 0) {
+        console.info(ciphertext)
+    } else {
+        try {
+            fs.writeFileSync(options.ofn, ciphertext)
+        } catch (err) {
+            console.error(`ERROR: ${err}`)
+            process.exit(1)
+        }
+        if (options.verbose) {
+            console.log(`wrote ciphertext to ${options.ofn}`)
+        }
+    }
+}
+
+// ================================================================
+// Misc
+// ================================================================
+function readInput() {
+    let text = ''
+    if (options.ifn !== 'stdin') {
+        try {
+	    // file
+            text = fs.readFileSync(options.ifn, 'utf8')
+        } catch (err) {
+            console.error(`ERROR: ${err}`)
+	    process.exit(1)
+        }
+    } else {
+	// stdin
+        try {
+            text = fs.readFileSync(process.stdin.fd, 'utf8')
+        } catch (err) {
+            console.error(`ERROR: ${err}`)
+	    process.exit(1)
+        }
+    }
+    if (options.verbose) {
+        console.log(`read ${text.length} bytes`)
+    }
+    return text
+}
+
+// ================================================================
+// main
+// ================================================================
+function main() {
+    getOptions()
+    text = readInput()
+    if (options.decrypt) {
+        if (options.verbose) {
+            console.log('decrypting')
+        }
+        decrypt(options.password, text, decryptPassed, decryptFailed)
+    } else {
+        if (options.verbose) {
+            console.log('encrypting')
+        }
+        encrypt(options.password, text, options.ofn, encryptPassed)
+    }
+}
+
+if (require.main === module) {
+    main();
+}
