@@ -10,7 +10,7 @@ INSTALL_DIR ?= /usr/local/bin
 default: all  ## Default is "all".
 
 .PHONY: all
-all: lint test  ## Run the lint and test targets.
+all: setup lint test  ## Run the lint and test targets.
 
 .PHONY: clean
 clean:
