@@ -12,14 +12,21 @@ default: all  ## Default is "all".
 .PHONY: all
 all: lint test  ## Run the lint and test targets.
 
+.PHONY: clean
+clean:
+	@$(TARGET) $@
+	git clean -d -x -f -e keep
+
 .PHONY: install
 install: $(INSTALL_DIR)/pam-crypt  ## Install $(INSTALL_DIR)/pam-crypt.
 
 $(INSTALL_DIR)/pam-crypt: pam-crypt
+	@$(TARGET) $@
 	sudo cp pam-crypt $@
 
 .PHONY: uninstall
 uninstall:  ## Uninstall $(INSTALL_DIR)/pam-crypt.
+	@$(TARGET) install
 	sudo rm -f $(INSTALL_DIR)/pam-crypt
 
 .PHONY: setup
