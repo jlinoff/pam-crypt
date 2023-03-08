@@ -20,37 +20,39 @@ You must also have the 'atob' and 'password-prompt' npm packages
 installed.
 
 Here is a simple example that shows how to decrypt a PAM generated
-file (`example.txt`) that was saved with the password `example`.
+file (`example.txt`) that was encrypted with the password `example`.
 
 ```bash
-./pam-crypt -d -P example -i example.txt | jq .
+pam-crypt -d -P example -i example.txt | jq .
 ```
 
-For more information run:
+For more information install `pam-crypt` and run:
 ```bash
-git clone https://github.com/jlinoff/pam-crypt.git
-cd pam-crypt
 make help             # to see the make targets
 ./pam-decrypt --help  # to see the program help
 ```
 
 ## Install
+This is how to install pam-crypt locally.
 ```bash
-git clone https://github.com/jlinoff/pam-crypt.git
+git clone https://github.com/jlinoff/pam-crypt.git $HOME/pam-crypt
 cd pam-crypt
 make
 make install
 ```
 
-## Unintall
+## Uninstall
+Do this to to uninstall pam-crypt.
 
 ```bash
+cd $HOME/pam-crypt
 make uninstall
+rm -rf $HOME/pam-crypt
 ```
 
 ## Errata
 
-`jq` analysis ideas.
+Random `jq` analysis ideas.
 
 
 ### various random ideas
