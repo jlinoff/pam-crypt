@@ -87,5 +87,3 @@ $ ./pam-crypt -d -P example -i example.txt | \
    jq '.records[] | objects | [( .fields[] | select(.name=="password") | "p: \(.value)"), "  ::: \(.title)"]'  -c | rg '^."p:' | \
    sort -f | column -s ':::' -t
 ```
-
-# document how i created the favicon
