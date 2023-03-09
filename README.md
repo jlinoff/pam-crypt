@@ -1,7 +1,8 @@
 # pam-crypt
 [![Release](https://img.shields.io/github/release/jlinoff/pam-crypt?style)](https://github.com/jlinoff/pam-crypt/releases)
 
-Encrypt/decrypt PAM and other files from the command line
+Encrypt/decrypt [PAM](https://github.com/jlinoff/pam) files and other files
+from the command line.
 
 pam-crypt is a node JS tool that will encrypt or decrypt a PAM text
 based database file or any other text file from the command line
