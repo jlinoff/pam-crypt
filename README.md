@@ -6,7 +6,7 @@ from the command line.
 
 pam-crypt is a node JS tool that will encrypt or decrypt a
 PAM text based database file or any other text file from the
-ommand line using the same algorithm that PAM uses (AES-256-CBC).
+command line using the same algorithm that PAM uses (AES-256-CBC).
 
 It can be used to analyze the contents of the PAM database
 to understand characteristics of the accounts. For example
