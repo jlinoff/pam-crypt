@@ -26,14 +26,14 @@ SYNOPSIS
 \tpam-crypt [OPTIONS] [FILE]
 
 DESCRIPTION
-\tpam-crypt is a node JS tool that will encrypt or decrypt a PAM text
-\tbased database file or any other text file from the command line
-\tusing the same algorithm that is used by PAM (AES-256-CBC).
+\tpam-crypt is a node JS tool that will encrypt or decrypt a
+\tPAM text based database file or any other text file from the
+\tcommand line using the same algorithm that PAM uses (AES-256-CBC).
 
-\tIt can be used to analyze the contents of the PAM database using
-\tcustom tools to understand characteristics of the account data.
-\tFor example you could use it to determine how many times a password
-\tor username is duplicated.
+\tIt can be used to analyze the contents of the PAM database
+\tto understand characteristics of the account data. For example
+\tyou could use it to determine how many times a password or
+\tusername is duplicated across all of the accounts.
 
 \tIt can also be used to facilitate record transfers to and from PAM
 \twhen combined with a custom tool that translates between the formats.

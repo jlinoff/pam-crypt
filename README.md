@@ -4,14 +4,14 @@
 Encrypt/decrypt [PAM](https://github.com/jlinoff/pam) files and other files
 from the command line.
 
-pam-crypt is a node JS tool that will encrypt or decrypt a PAM text
-based database file or any other text file from the command line
-using the same algorithm that is used by PAM (AES-256-CBC).
+pam-crypt is a node JS tool that will encrypt or decrypt a
+PAM text based database file or any other text file from the
+ommand line using the same algorithm that PAM uses (AES-256-CBC).
 
-It can be used to analyze the contents of the PAM database using
-custom tools to understand characteristics of the account data.
-For example you could use it to determine how many times a password
-or username is duplicated.
+It can be used to analyze the contents of the PAM database
+to understand characteristics of the accounts. For example
+you could use it to determine how many times a password or
+username is duplicated across all of the accounts.
 
 It can also be used to facilitate record transfers to and from PAM
 when combined with a custom tool that translates between the formats.
