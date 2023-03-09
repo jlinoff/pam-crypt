@@ -4,7 +4,7 @@
 Encrypt/decrypt [PAM](https://github.com/jlinoff/pam) files and other files
 from the command line.
 
-pam-crypt is a node JS tool that will encrypt or decrypt a
+`pam-crypt` is a node JS tool that will encrypt or decrypt a
 PAM text based database file or any other text file from the
 command line using the same algorithm that PAM uses (AES-256-CBC).
 
