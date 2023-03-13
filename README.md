@@ -50,7 +50,7 @@ make
 make install
 ```
 
-## Unintall
+## Uninstall
 
 ```bash
 make uninstall
