@@ -46,6 +46,7 @@ test1: | example.txt  ## testbasic decryption.
 	./pam-crypt -d -P example -i example.txt > $@.js
 	file $@.js
 	@$(PRINT) "$@ PASSED"
+	@rm -f $@.*
 
 .PHONY: test2
 test2: | example.txt  ## Test -P and -o.
@@ -56,6 +57,7 @@ test2: | example.txt  ## Test -P and -o.
 	./pam-crypt -d -p $@.pass -i example.txt -o $@.js
 	file $@.js
 	@$(PRINT) "$@ PASSED"
+	@rm -f $@.*
 
 .PHONY: test3
 test3: | README.md  ## Test encryption and decryption.
@@ -67,6 +69,7 @@ test3: | README.md  ## Test encryption and decryption.
 	./pam-crypt -d -P $@ -i $@.enc -o $@.dec
 	diff README.md $@.dec
 	@$(PRINT) "$@ PASSED"
+	@rm -f $@.*
 
 # double enc/dec
 .PHONY: test4
@@ -79,10 +82,11 @@ test4: | example.txt  ## Test double encryption and decryption.
 	./pam-crypt -d -P example -i $@.dec.dec -o $@.dec
 	file $@.dec
 	@$(PRINT) "$@ PASSED"
+	@rm -f $@.*
 
 # stdin
 .PHONY: test5
-test5: | example.text  ## Test read from stdin.
+test5: | example.txt  ## Test read from stdin.
 	@$(TARGET) $@
 	@rm -rf $@*
 	node --version
@@ -90,6 +94,7 @@ test5: | example.text  ## Test read from stdin.
 	cat example.txt | ./pam-crypt -d -p $@.pass -o $@.js
 	file $@.js
 	@$(PRINT) "$@ PASSED"
+	@rm -f $@.*
 
 .PHONY: lint
 lint:  ## Run jshint to lint the javascript.
