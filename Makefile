@@ -100,6 +100,7 @@ test5: | example.txt  ## Test read from stdin.
 .PHONY: lint
 lint:  ## Run jshint to lint the javascript.
 	@$(TARGET) $@
+	npm install -g jshint
 	jshint --config jshint.json pam-crypt
 	@echo "$@ PASSED"
 
