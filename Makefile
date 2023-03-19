@@ -53,7 +53,7 @@ test2: | example.txt  ## Test -P and -o.
 	@$(TARGET) $@
 	@rm -rf $@*
 	node --version
-	echo -n 'example' >$@.pass
+	printf 'example' >$@.pass
 	./pam-crypt -d -p $@.pass -i example.txt -o $@.js
 	file $@.js
 	@$(PRINT) "$@ PASSED"
@@ -90,8 +90,9 @@ test5: | example.txt  ## Test read from stdin.
 	@$(TARGET) $@
 	@rm -rf $@*
 	node --version
-	echo -n 'example' >$@.pass
+	printf 'example' >$@.pass
 	cat example.txt | ./pam-crypt -d -p $@.pass -o $@.js
+	ls -l $@.js
 	file $@.js
 	@$(PRINT) "$@ PASSED"
 	@rm -f $@.*
