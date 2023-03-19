@@ -1,6 +1,6 @@
-name: Build and Test PAM
+name: Build and Test pam-crypt
 
-run-name: ${{ github.actor }} is building PAM
+run-name: ${{ github.actor }} is building pam-crypt
 
 on:
   push:
@@ -32,24 +32,7 @@ jobs:
           sudo apt-get install -y zip
           sudo apt-get install -y lsof
           sudo apt-get install -y ripgrep
-          sudo pip install pipenv
-          pip --version
-          pipenv --version
-      - name: google-chrome
-        run: |
-          wget -vP /tmp/ https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-          ls -l /tmp/google-chrome-stable_current_amd64.deb
-          sudo apt-get install -y --allow-downgrades /tmp/google-chrome-stable_current_amd64.deb
-          google-chrome --version
-      - name: chromedriver
-        run: |
-          VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE")
-          echo "VERSION=${VERSION}"
-          wget -vP /tmp/ "https://chromedriver.storage.googleapis.com/${VERSION}/chromedriver_linux64.zip"
-          ls -l /tmp/chromedriver_linux64.zip
-          sudo unzip -o /tmp/chromedriver_linux64.zip -d /usr/bin
-          chromedriver --version
-      - name: checkout-pam
+      - name: checkout-pam-crypt
         uses: actions/checkout@v2
         with:
           repository: jlinoff/pam
@@ -58,16 +41,7 @@ jobs:
         run: |
           cd pam
           make help
-      - name: make build
+      - name: make all
         run: |
           cd pam
-          make
-      - name: make test
-        run: |
-          cd pam
-          make test
-      - name: make web
-        run: |
-          cd pam
-          make web
-          ls -l pam-www.tar
+          make all
