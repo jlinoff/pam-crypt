@@ -35,13 +35,13 @@ jobs:
       - name: checkout-pam-crypt
         uses: actions/checkout@v2
         with:
-          repository: jlinoff/pam
-          path: './pam'
+          repository: jlinoff/pam-crypt
+          path: './pam-crypt'
       - name: make help
         run: |
-          cd pam
+          cd pam-crypt
           make help
       - name: make all
         run: |
-          cd pam
+          cd pam-crypt
           make all
