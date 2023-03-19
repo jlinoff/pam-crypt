@@ -35,6 +35,7 @@ setup:  ## npm install atob and password-prompt
 	node --version
 	npm install atob
 	npm install password-prompt
+	npm install -g jshint
 
 .PHONY: test
 test: test1 test2 test3 test4 test5  ## Run all tests.
@@ -100,7 +101,6 @@ test5: | example.txt  ## Test read from stdin.
 .PHONY: lint
 lint:  ## Run jshint to lint the javascript.
 	@$(TARGET) $@
-	npm install -g jshint
 	jshint --config jshint.json pam-crypt
 	@echo "$@ PASSED"
 
