@@ -24,7 +24,7 @@ jobs:
           sudo apt-get install -y tzdata
           sudo apt-get install -y software-properties-common
           sudo apt-get install -y build-essential
-          sudo apt-get install -y node
+          sudo apt-get install -y nodejs
           sudo apt-get install -y npm
           sudo apt-get install -y aspell
           sudo apt-get install -y curl
