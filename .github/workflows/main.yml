@@ -1,0 +1,73 @@
+name: Build and Test PAM
+
+run-name: ${{ github.actor }} is building PAM
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  pam-build-test:
+    runs-on: ubuntu-20.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      SHELL: /usr/bin/bash
+      PIPENV_VENV_IN_PROJECT: 1
+    steps:
+      - name: required-packages
+        run: |
+          sudo apt-get update
+          sudo apt-get upgrade -y
+          sudo apt-get install -y apt-utils
+          sudo apt-get install -y tzdata
+          sudo apt-get install -y software-properties-common
+          sudo apt-get install -y build-essential
+          sudo apt-get install -y node
+          sudo apt-get install -y npm
+          sudo apt-get install -y aspell
+          sudo apt-get install -y curl
+          sudo apt-get install -y wget
+          sudo apt-get install -y zip
+          sudo apt-get install -y lsof
+          sudo apt-get install -y ripgrep
+          sudo pip install pipenv
+          pip --version
+          pipenv --version
+      - name: google-chrome
+        run: |
+          wget -vP /tmp/ https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          ls -l /tmp/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y --allow-downgrades /tmp/google-chrome-stable_current_amd64.deb
+          google-chrome --version
+      - name: chromedriver
+        run: |
+          VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE")
+          echo "VERSION=${VERSION}"
+          wget -vP /tmp/ "https://chromedriver.storage.googleapis.com/${VERSION}/chromedriver_linux64.zip"
+          ls -l /tmp/chromedriver_linux64.zip
+          sudo unzip -o /tmp/chromedriver_linux64.zip -d /usr/bin
+          chromedriver --version
+      - name: checkout-pam
+        uses: actions/checkout@v2
+        with:
+          repository: jlinoff/pam
+          path: './pam'
+      - name: make help
+        run: |
+          cd pam
+          make help
+      - name: make build
+        run: |
+          cd pam
+          make
+      - name: make test
+        run: |
+          cd pam
+          make test
+      - name: make web
+        run: |
+          cd pam
+          make web
+          ls -l pam-www.tar
