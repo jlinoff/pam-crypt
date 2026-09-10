@@ -104,14 +104,24 @@ lint:  ## Run jshint to lint the javascript.
 	jshint --config jshint.json pam-crypt
 	@echo "$@ PASSED"
 
+
+.PHONY: zip
+zip:  project.zip  ## Make the project.zip file from git repo contents.
+
+GIT_SRC_FILES := $(shell git ls-files)
+project.zip: $(GIT_SRC_FILES)
+	zip "$@" $(GIT_SRC_FILES)
+
 .PHONY: help
 help:
 	@$(TARGET) $@
-	@column --version
 	@echo "make targets:"
-	@grep -E '^\S+:.*##' $(MAKEFILE_LIST) | \
-		sed -e 's/\([^ \t]*\).*##/\1 ##/' | \
+	@grep -E '^[^.[:space:]][^[:space:]]*:.*[[:space:]]##' $(MAKEFILE_LIST) 2>/dev/null | \
+		grep -E -v '^ *#' | \
+		grep -E -v "egrep|sort|sed|MAKEFILE" | \
+		sed -e 's/:[[:space:]].*##/##/' -e 's/^[^:#]*://' | \
+		awk -F'##' '{printf("%-18s %s\n",$$1,$$2)}' | \
 		sort -f | \
-		column -s '##' -t | sed -e 's/^/    /'
+		sed -e 's@^@   @'
 	@echo "make variables"
-	@echo "INSTALL_DIR ## $(INSTALL_DIR)" | column -s '##' -t | sed -e 's/^/    /'
+	@printf '   INSTALL_DIR : %s\n' "$(INSTALL_DIR)"
