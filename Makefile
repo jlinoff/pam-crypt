@@ -99,9 +99,11 @@ test5: | example.txt  ## Test read from stdin.
 	@rm -f $@.*
 
 .PHONY: lint
-lint:  ## Run jshint to lint the javascript.
+lint:  ## Run jshint to lint the old javascript tool.
 	@$(TARGET) $@
 	jshint --config jshint.json pam-crypt
+	pipenv run pylint pam_decode.py
+	pipenv run pylint pam_encode.py
 	@echo "$@ PASSED"
 
 

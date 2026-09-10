@@ -1,30 +1,30 @@
-# pam-crypt - encrypt/decrypt PAM and other files from the command line
+# pam-crypt - tools to encrypt/decrypt PAM and other files from the command line
 [![Release](https://img.shields.io/github/release/jlinoff/pam-crypt?style)](https://github.com/jlinoff/pam-crypt/releases)
 
-pam-crypt is a node JS tool that will encrypt or decrypt a PAM text
-based database file or any other text file from the command line
-using the same algorithm that is used by PAM (AES-256-CBC).
+`pam-crypt` is an old node JS tool that will encrypt or decrypt old PAM
+vaults (PAMv1).
 
-It can be used to analyze the contents of the PAM database using
+`pam_decode.py` is a newer python based to that will decrupt a PAMv2 file.
+These are the most recent files handled by PAM.
+
+Both can be used to analyze the contents of the PAM database using
 custom tools to understand characteristics of the account data.
 For example you could use it to determine how many times a password
-or username is duplicated.
-
-It can also be used to facilitate record transfers to and from PAM
-when combined with a custom tool that translates between the formats.
-
-You must have a recent version of nodejs installed to use it. It was
-developed with node v19.7.0.
-
-You must also have the 'atob' and 'password-prompt' npm packages
-installed.
+or username is duplicated which is already handled in PAM by the
+reuse menu function.
 
 Here is a simple example that shows how to decrypt a PAM generated
 file (`example.txt`) that was saved with the password `example`.
 
 ```bash
-# decrypt it
+# decrypt it - old style this will fail for PAMv2 files.
 ./pam-crypt -d -P example -i example.txt -o example.txt.dec
+# view the result
+cat example.txt.dec | jq .
+
+# decrypt it - new style this works for PAMv2 files.
+pipenv run ./pam_decode.py example.txt >example.txt.dec
+Password:
 # view the result
 cat example.txt.dec | jq .
 ```
@@ -33,8 +33,8 @@ For more information run:
 ```bash
 git clone https://github.com/jlinoff/pam-crypt.git
 cd pam-crypt
-make help             # to see the make targets
-./pam-crypt --help  # to see the program help
+./pam-crypt --help   # to see the program help
+./pam_decrypt --help # to see the program help
 ```
 
 ### Lint and test
