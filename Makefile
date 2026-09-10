@@ -6,10 +6,10 @@ TARGET := printf "${TERM_ANSI_BOLD}${TERM_ANSI_MAGENTA}\n=-=-=-=-= %s: %s =-=-=-
 PRINT  := printf "${TERM_ANSI_BOLD}${TERM_ANSI_MAGENTA}%s${TERM_ANSI_RESET}\n" "`date`"
 
 .PHONY: default
-default: all  ## Default is "all".
+default: all
 
 .PHONY: all
-all: setup lint test  ## Run the lint and test targets.
+all: setup lint test  ## Default. Run the lint and test targets.
 
 .PHONY: clean
 clean:
