@@ -4,7 +4,6 @@ TERM_ANSI_MAGENTA := "\\033[35m"
 TERM_ANSI_RESET   := "\\033[0m"
 TARGET := printf "${TERM_ANSI_BOLD}${TERM_ANSI_MAGENTA}\n=-=-=-=-= %s: %s =-=-=-=-=${TERM_ANSI_RESET}\n" "`date`"
 PRINT  := printf "${TERM_ANSI_BOLD}${TERM_ANSI_MAGENTA}%s${TERM_ANSI_RESET}\n" "`date`"
-INSTALL_DIR ?= /usr/local/bin
 
 .PHONY: default
 default: all  ## Default is "all".
@@ -17,18 +16,6 @@ clean:
 	@$(TARGET) $@
 	git clean -d -x -f -e keep
 
-.PHONY: install
-install: $(INSTALL_DIR)/pam-crypt  ## Install $(INSTALL_DIR)/pam-crypt.
-
-$(INSTALL_DIR)/pam-crypt: pam-crypt
-	@$(TARGET) $@
-	sudo cp pam-crypt $@
-
-.PHONY: uninstall
-uninstall:  ## Uninstall $(INSTALL_DIR)/pam-crypt.
-	@$(TARGET) install
-	sudo rm -f $(INSTALL_DIR)/pam-crypt
-
 .PHONY: setup
 setup:  ## npm install atob and password-prompt
 	@$(TARGET) $@
@@ -38,64 +25,35 @@ setup:  ## npm install atob and password-prompt
 	npm install -g jshint
 
 .PHONY: test
-test: test1 test2 test3 test4 test5  ## Run all tests.
+test: test-pamv1 test-pamv2 ## Run tests.
 
-.PHONY: test1
-test1: | example.txt  ## testbasic decryption.
+.PHONY: test-pamv1
+test-pamv1: | example.txt
 	@$(TARGET) $@
+	@rm -f $@.*
 	node --version
-	./pam-crypt -d -P example -i example.txt > $@.js
-	file $@.js
-	@$(PRINT) "$@ PASSED"
+	./pam-crypt -e -P example -i example.txt -o $@.enc.json
+	./pam-crypt -d -P example -i $@.enc.json -o $@.dec.json
+	file $@.enc.json
+	file $@.dec.json
+	jq -S . $@.dec.json > $@.dec.json.1
+	jq -S . example.txt > $@.dec.json.2
+	diff $@.dec.json.1 $@.dec.json.2
+	@$(PRINT) "$@ - PASSED"
 	@rm -f $@.*
 
-.PHONY: test2
-test2: | example.txt  ## Test -P and -o.
+.PHONY: test-pamv2
+test-pamv2: | example.txt
 	@$(TARGET) $@
-	@rm -rf $@*
-	node --version
-	printf 'example' >$@.pass
-	./pam-crypt -d -p $@.pass -i example.txt -o $@.js
-	file $@.js
-	@$(PRINT) "$@ PASSED"
 	@rm -f $@.*
-
-.PHONY: test3
-test3: | README.md  ## Test encryption and decryption.
-	@$(TARGET) $@
-	@rm -rf $@*
-	node --version
-	./pam-crypt -e -P $@ -i README.md -o $@.enc
-	file $@.enc
-	./pam-crypt -d -P $@ -i $@.enc -o $@.dec
-	diff README.md $@.dec
-	@$(PRINT) "$@ PASSED"
-	@rm -f $@.*
-
-# double enc/dec
-.PHONY: test4
-test4: | example.txt  ## Test double encryption and decryption.
-	@$(TARGET) $@
-	@rm -rf $@*
-	node --version
-	./pam-crypt -e -P example -i example.txt -o $@.enc.enc
-	./pam-crypt -d -P example -i $@.enc.enc -o $@.dec.dec
-	./pam-crypt -d -P example -i $@.dec.dec -o $@.dec
-	file $@.dec
-	@$(PRINT) "$@ PASSED"
-	@rm -f $@.*
-
-# stdin
-.PHONY: test5
-test5: | example.txt  ## Test read from stdin.
-	@$(TARGET) $@
-	@rm -rf $@*
-	node --version
-	printf 'example' >$@.pass
-	cat example.txt | ./pam-crypt -d -p $@.pass -o $@.js
-	ls -l $@.js
-	file $@.js
-	@$(PRINT) "$@ PASSED"
+	PAM_PASSWORD="example" pipenv run ./pam_encode.py example.txt >$@.enc.json
+	PAM_PASSWORD="example" pipenv run ./pam_decode.py $@.enc.json >$@.dec.json
+	file $@.enc.json
+	file $@.dec.json
+	jq -S . $@.dec.json > $@.dec.json.1
+	jq -S . example.txt > $@.dec.json.2
+	diff $@.dec.json.1 $@.dec.json.2
+	@$(PRINT) "$@ - PASSED"
 	@rm -f $@.*
 
 .PHONY: lint
@@ -125,5 +83,3 @@ help:
 		awk -F'##' '{printf("%-18s %s\n",$$1,$$2)}' | \
 		sort -f | \
 		sed -e 's@^@   @'
-	@echo "make variables"
-	@printf '   INSTALL_DIR : %s\n' "$(INSTALL_DIR)"

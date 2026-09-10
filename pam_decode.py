@@ -1,20 +1,13 @@
 #!/usr/bin/env python3
 
-"""
-Decrypt a PAM v2 vault and write the JSON plaintext to stdout.
-
-Password input is read from the controlling terminal by getpass(), so it
-does not appear in the process argument list.
-
-Requires:
-    pip install cryptography
-"""
+"""Decrypt a PAM v2 vault and write its JSON plaintext to stdout."""
 
 import argparse
 import base64
 import binascii
 import getpass
 import json
+import os
 import sys
 
 from cryptography.hazmat.primitives import hashes, padding
@@ -27,6 +20,7 @@ SALT_LEN = 16
 IV_LEN = 16
 KEY_LEN = 32
 ITERATIONS = 600_000
+PASSWORD_ENV = "PAM_PASSWORD"
 
 
 class PamDecodeError(Exception):
@@ -42,6 +36,22 @@ def derive_key(password: str, salt: bytes) -> bytes:
         iterations=ITERATIONS,
     )
     return kdf.derive(password.encode("utf-8"))
+
+
+def get_password() -> str:
+    """Read the PAM password from the environment or controlling terminal."""
+    password = os.environ.get(PASSWORD_ENV)
+
+    if password is not None:
+        if not password:
+            raise PamDecodeError(f"{PASSWORD_ENV} is empty")
+        return password
+
+    password = getpass.getpass("Password: ")
+    if not password:
+        raise PamDecodeError("empty password")
+
+    return password
 
 
 def decrypt_v2(text: str, password: str) -> str:
@@ -67,12 +77,10 @@ def decrypt_v2(text: str, password: str) -> str:
         )
 
     key = derive_key(password, salt)
-
     decryptor = Cipher(
         algorithms.AES(key),
         modes.CBC(iv),
     ).decryptor()
-
     padded = decryptor.update(ciphertext) + decryptor.finalize()
 
     try:
@@ -84,22 +92,33 @@ def decrypt_v2(text: str, password: str) -> str:
         ) from exc
 
     try:
-        text = plaintext.decode("utf-8")
+        plaintext_text = plaintext.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise PamDecodeError(
-            "decryption produced invalid UTF-8: wrong password or damaged file"
+            "decryption produced invalid UTF-8: "
+            "wrong password or damaged file"
         ) from exc
 
-    # Validate that what we decrypted really is JSON.
     try:
-        json.loads(text)
+        json.loads(plaintext_text)
     except json.JSONDecodeError as exc:
         raise PamDecodeError(
             "decryption did not produce valid JSON: "
             "wrong password or damaged file"
         ) from exc
 
-    return text
+    return plaintext_text
+
+
+def read_vault(path: str) -> str:
+    """Read a PAM ciphertext file as ASCII text."""
+    try:
+        with open(path, "r", encoding="ascii") as file_obj:
+            return file_obj.read().strip()
+    except OSError as exc:
+        raise PamDecodeError(str(exc)) from exc
+    except UnicodeDecodeError as exc:
+        raise PamDecodeError("vault is not ASCII PAM ciphertext") from exc
 
 
 def main() -> int:
@@ -111,31 +130,13 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        with open(args.vault, "r", encoding="ascii") as fp:
-            encrypted = fp.read().strip()
-    except OSError as exc:
-        print(f"pam-decode: {exc}", file=sys.stderr)
-        return 1
-    except UnicodeDecodeError:
-        print(
-            "pam-decode: vault is not ASCII PAM ciphertext",
-            file=sys.stderr,
-        )
-        return 1
-
-    password = getpass.getpass("Password: ")
-
-    if not password:
-        print("pam-decode: empty password", file=sys.stderr)
-        return 1
-
-    try:
+        encrypted = read_vault(args.vault)
+        password = get_password()
         plaintext = decrypt_v2(encrypted, password)
     except PamDecodeError as exc:
-        print(f"pam-decode: {exc}", file=sys.stderr)
+        print(f"pam_decode: {exc}", file=sys.stderr)
         return 1
 
-    # stdout contains JSON and nothing else.
     sys.stdout.write(plaintext)
     if not plaintext.endswith("\n"):
         sys.stdout.write("\n")

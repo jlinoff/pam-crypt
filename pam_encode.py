@@ -19,6 +19,7 @@ SALT_LEN = 16
 IV_LEN = 16
 KEY_LEN = 32
 ITERATIONS = 600_000
+PASSWORD_ENV = "PAM_PASSWORD"
 
 
 class PamEncodeError(Exception):
@@ -36,6 +37,26 @@ def derive_key(password: str, salt: bytes) -> bytes:
     return kdf.derive(password.encode("utf-8"))
 
 
+def get_password() -> str:
+    """Read the PAM password from the environment or controlling terminal."""
+    password = os.environ.get(PASSWORD_ENV)
+
+    if password is not None:
+        if not password:
+            raise PamEncodeError(f"{PASSWORD_ENV} is empty")
+        return password
+
+    password = getpass.getpass("Password: ")
+    if not password:
+        raise PamEncodeError("empty password")
+
+    confirmation = getpass.getpass("Confirm password: ")
+    if password != confirmation:
+        raise PamEncodeError("passwords do not match")
+
+    return password
+
+
 def encrypt_v2(text: str, password: str) -> str:
     """Encrypt JSON plaintext using the PAM v2 format."""
     salt = os.urandom(SALT_LEN)
@@ -49,10 +70,9 @@ def encrypt_v2(text: str, password: str) -> str:
         algorithms.AES(key),
         modes.CBC(iv),
     ).encryptor()
-
     ciphertext = encryptor.update(padded) + encryptor.finalize()
-    payload = salt + iv + ciphertext
 
+    payload = salt + iv + ciphertext
     return PREFIX + base64.b64encode(payload).decode("ascii")
 
 
@@ -82,21 +102,12 @@ def main() -> int:
 
     try:
         plaintext = read_json(args.json_file)
+        password = get_password()
+        encrypted = encrypt_v2(plaintext, password)
     except PamEncodeError as exc:
         print(f"pam_encode: {exc}", file=sys.stderr)
         return 1
 
-    password = getpass.getpass("Password: ")
-    if not password:
-        print("pam_encode: empty password", file=sys.stderr)
-        return 1
-
-    confirmation = getpass.getpass("Confirm password: ")
-    if password != confirmation:
-        print("pam_encode: passwords do not match", file=sys.stderr)
-        return 1
-
-    encrypted = encrypt_v2(plaintext, password)
     sys.stdout.write(encrypted)
     sys.stdout.write("\n")
 
