@@ -6,43 +6,95 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   pam-build-test:
     runs-on: ubuntu-latest
     env:
-      DEBIAN_FRONTEND: noninteractive
-      SHELL: /usr/bin/bash
       PIPENV_VENV_IN_PROJECT: 1
+
     steps:
-      - name: required-packages
-        run: |
-          sudo apt-get update
-          sudo apt-get upgrade -y
-          sudo apt-get install -y apt-utils
-          sudo apt-get install -y tzdata
-          sudo apt-get install -y software-properties-common
-          sudo apt-get install -y build-essential
-          sudo apt-get install -y util-linux
-          sudo apt-get install -y nodejs
-          sudo apt-get install -y npm
-          sudo apt-get install -y aspell
-          sudo apt-get install -y curl
-          sudo apt-get install -y wget
-          sudo apt-get install -y zip
-          sudo apt-get install -y lsof
-          sudo apt-get install -y ripgrep
-      - name: checkout-pam-crypt
-        uses: actions/checkout@v2
+      # No apt step at all.
+      #
+      # The previous version ran `apt-get upgrade -y`, which upgrades every
+      # package on the runner rather than the ones this project needs. That is
+      # how a build of two Python scripts and a Node script came to fail while
+      # unpacking Firefox: on Ubuntu 24.04 the firefox deb is a transitional
+      # package whose pre-install script talks to snapcraft.io, and that
+      # returned HTTP 408. Nothing here uses Firefox.
+      #
+      # It then installed thirteen packages. The Makefile and scripts between
+      # them invoke node, npm, jq, file, diff, git, zip and pipenv. Every one
+      # except pipenv is already on the runner image, and apt-utils, tzdata,
+      # software-properties-common, build-essential, util-linux, aspell, curl,
+      # wget, lsof and ripgrep were never used at all.
+      #
+      # Upgrading the runner also defeats its purpose: the image is pinned and
+      # tested by GitHub, and replacing its packages with whatever the Ubuntu
+      # mirrors hold that minute makes the build depend on the time of day.
+
+      - name: checkout
+        # v2 runs on a Node release GitHub has retired: it warns now and will
+        # stop working later.
+        #
+        # The explicit `repository:` and `path:` are gone. This workflow lives
+        # in the repository it builds, so the default checkout is correct, and
+        # checking out at the root removes the `cd pam-crypt` from every step.
+        uses: actions/checkout@v4
+
+      - name: setup-python
+        # Pipfile and Pipfile.lock both require 3.14. The runner image ships an
+        # older default, so without this pipenv either refuses outright or
+        # builds a venv against the wrong interpreter.
+        uses: actions/setup-python@v5
         with:
-          repository: jlinoff/pam-crypt
-          path: './pam-crypt'
-      - name: make help
+          python-version: '3.14'
+
+      - name: setup-node
+        # Already on the image, but pinning it means a runner image update
+        # cannot change the Node version under the tests without a commit here
+        # saying so.
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: install-python-dependencies
+        # The previous workflow never did this. `make all` calls
+        # `pipenv run pylint`, and `pipenv run` installs nothing — so lint
+        # would have failed the moment the apt problem was fixed.
+        #
+        # `pipenv sync` installs exactly what Pipfile.lock pins and fails if
+        # the lock is missing or stale. That is what CI wants: test the
+        # dependency set that was committed, not whatever resolves today.
         run: |
-          cd pam-crypt
-          make help
-      - name: make all
+          python -m pip install --upgrade pip
+          python -m pip install pipenv
+          pipenv sync
+
+      - name: verify-tools
+        # The Makefile assumes these exist. They are all on the runner image,
+        # but "assumed present" is how the previous workflow ended up
+        # installing thirteen packages to be safe. Check instead: if the image
+        # ever drops one, this says which, rather than surfacing as a make
+        # error thirty lines into a target.
         run: |
-          cd pam-crypt
-          make all
+          missing=""
+          for tool in node npm jq file diff git zip pipenv; do
+            command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+          done
+          if [ -n "$missing" ]; then
+            echo "missing from the runner image:$missing"
+            echo "install only what is missing — do not run apt-get upgrade"
+            exit 1
+          fi
+          echo "all required tools present"
+
+      - name: make-help
+        run: make help
+
+      - name: make-all
+        run: make all
