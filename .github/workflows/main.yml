@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  pam-build-test:
+  pam-crypt-build-test:
     runs-on: ubuntu-latest
     env:
       PIPENV_VENV_IN_PROJECT: 1
