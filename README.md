@@ -12,16 +12,21 @@ application.
 
 > ## ⚠ These tools decrypt your passwords
 >
-> Everything below produces **plaintext copies of your entire vault**. Every
-> password, in the clear, in a terminal or a file.
+> Any command that decrypts a PAM vault **exposes its contents in plaintext**.
+> Depending on the pipeline, that plaintext may exist in process memory,
+> terminal output, or a temporary file.
 >
 > - **Prefer pipes to files.** `meld <(pam_decode.py a) <(pam_decode.py b)`
->   never writes plaintext to disk. `pam_decode.py a > a.json` does, and that
+>   avoids creating persistent plaintext vault files. `pam_decode.py a > a.json`
+>   does, and that
 >   file will be picked up by backups, sync folders and desktop search.
+>
 > - **Delete any plaintext file when you are done**, and remember that deleting
 >   does not remove it from a backup that has already run.
+>
 > - **Do not put the password on the command line.** See
 >   [Passwords and shell history](#passwords-and-shell-history).
+>
 > - **Do not do this on a machine you do not control.**
 
 ## Requirements
@@ -97,8 +102,8 @@ pipenv run ./pam_decode.py example.txt | jq .
 Password:
 ```
 
-Piping to `jq` rather than redirecting to a file keeps the plaintext out of the
-filesystem.
+Piping to `jq` rather than redirecting to a file avoids creating a persistent plaintext
+vault file.
 
 ### Encrypt JSON back into a vault
 
@@ -155,8 +160,9 @@ DIFFTOOL=meld ./pam-diff.sh old-vault.txt new-vault.txt   # side by side
 It accepts plaintext JSON as well as encrypted vaults, so you can compare a
 vault against an exported copy without re-encrypting first.
 
-If you prefer to do it by hand, process substitution keeps the plaintext out of
-the filesystem:
+If you prefer to do it by hand, process substitution avoids creating
+persistent plaintext vault files.
+
 
 ```bash
 meld <(pipenv run ./pam_decode.py a.txt) <(pipenv run ./pam_decode.py b.txt)
@@ -174,13 +180,87 @@ read -rsp 'Password: ' PAM_PASSWORD ; export PAM_PASSWORD
 pipenv run ./pam_decode.py vault.txt > /tmp/vault.json   # plaintext on disk
 "$EDITOR" /tmp/vault.json
 pipenv run ./pam_encode.py /tmp/vault.json > vault-new.txt
-shred -u /tmp/vault.json 2>/dev/null || rm -f /tmp/vault.json
+rm -f /tmp/vault.json
 
 unset PAM_PASSWORD
 ```
 
-This is the one workflow that must write plaintext to disk. Put it under
-`/tmp`, never in the directory holding the vault, and remove it immediately.
+This workflow uses a temporary plaintext file so that an editor can modify it.
+Put it under `/tmp`, never in the directory holding the vault, and remove it immediately.
+
+> On APFS, SSDs, CoW filesystems, snapshots, etc., overwriting a file using `shred`
+> doesn't guarantee the underlying blocks have been destroyed.
+> For that reason, simply using `rm` is reasonable here; neither approach
+> guarantees physical erasure on modern storage.
+
+### Simple Merge
+
+Merge a single record named `"Instagram"` from one vault named `pam-vault-1.txt`
+into the other one named `pam-vault-2.txt`.
+
+#### Step 1. Merge
+
+Extract the `"Instagram"` record from the first vault and insert it
+into the second one in plaintext format using PAMs title-ordering
+semantics.
+
+```bash
+# Avoid exposing passwords in the command line history
+read -rsp 'Password 1: ' PAM_PASSWORD ; export PAM_PASSWORD
+echo
+./pam_decode.py pam-vault-1.txt > /tmp/vault1.json
+unset PAM_PASSWORD
+
+read -rsp 'Password 2: ' PAM_PASSWORD ; export PAM_PASSWORD
+echo
+./pam_decode.py pam-vault-2.txt > /tmp/vault2.json
+unset PAM_PASSWORD
+
+jq --slurpfile src /tmp/vault1.json '
+    ($src[0].records | map(select(.title == "Instagram"))) as $matches |
+    if ($matches | length) != 1 then
+        error("expected exactly one Instagram record in source vault")
+    elif any(.records[]; .title == "Instagram") then
+        error("Instagram record already exists in destination vault")
+    else
+        .records += [$matches[0]] |
+        .records |= sort_by(
+            .title |
+            gsub("^\\s+|\\s+$"; "") |
+            ascii_downcase
+        ) |
+        del(.meta.integrity)
+    end
+' /tmp/vault2.json > /tmp/merged.json
+```
+
+#### Step 2. Inspect
+
+Optionally inspect the merge.
+
+```bash
+jq '.records[] | select(.title == "Instagram")' /tmp/merged.json
+```
+
+#### Step 3. Read into PAM
+
+Load `/tmp/merged.json` into PAM.
+The merge removed the now-stale `meta.integrity` value because
+the record set changed.
+
+#### Step 4. Save the result
+
+Save the imported vault normally from PAM as `pam-vault-2.txt`. PAM will
+generate the appropriate integrity metadata and encrypt the vault with the
+password you supply.
+
+#### Step 5. Cleanup
+
+Clean up intermediate data. This is critical for security.
+
+```bash
+rm -f /tmp/vault[12].json /tmp/merged.json
+```
 
 ## Make targets
 
