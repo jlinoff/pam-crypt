@@ -7,8 +7,8 @@
 #   DIFFTOOL=meld pam-diff.sh pam-file1 pam-file2
 #   PAM_DECODE="./pam_decode.py" DIFFTOOL=meld pam-diff.sh pam-file1 pam-file2
 #
-# Decrypted content is kept in process substitutions and a private temporary
-# directory, never beside the vault being compared.
+# Decrypted content is written only to a private temporary directory, never
+# beside the vault being compared, and that directory is removed on any exit.
 #
 # The earlier version wrote the decrypted JSON to "$PAM1.$$" — that is, into
 # whatever directory the vault lives in, which for most people is a sync folder.
@@ -55,7 +55,7 @@ done
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/pam-diff.XXXXXXXX")"
 
 
-# Shellcheck gives false warning here because it does not recognize
+# Shellcheck gives a false warning here because it does not recognize
 # the use in the trap statement.
 # shellcheck disable=SC2329
 cleanup() {
