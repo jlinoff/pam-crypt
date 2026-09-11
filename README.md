@@ -4,14 +4,19 @@
 `pam-crypt` is an old node JS tool that will encrypt or decrypt old PAM
 vaults (PAMv1).
 
-`pam_decode.py` is a newer python based to that will decrupt a PAMv2 file.
-These are the most recent files handled by PAM.
+`pam_decode.py` is a newer python based tool that will decrypt a PAMv2 file.
+For the most recent versions for PAM (v2.0 or later).
 
-Both can be used to analyze the contents of the PAM database using
-custom tools to understand characteristics of the account data.
-For example you could use it to determine how many times a password
-or username is duplicated which is already handled in PAM by the
-reuse menu function.
+`pam_encode.py` is a newer python based tool that will encrypt a JSON file.
+For the most recent versions for PAM (v2.0 or later).
+
+These tools can be used to analyze the contents of the PAM vault using
+custom tools from the command line to understand characteristics of the
+account data and rewrite the vault.
+
+For example you could use `pam_decode.py` and `pam_encode.py` to merge
+to manually add a record in your favorite editor or build a merge pipeline
+to add new records from a local flow.
 
 Here is a simple example that shows how to decrypt a PAM generated
 file (`example.txt`) that was saved with the password `example`.
@@ -22,7 +27,9 @@ file (`example.txt`) that was saved with the password `example`.
 # view the result
 cat example.txt.dec | jq .
 
-# decrypt it - new style this works for PAMv2 files.
+# decrypt it - new style that works for PAMv2 files.
+# You can also set the password in the PAM_PASSWORD environment
+# variable for scripts.
 pipenv run ./pam_decode.py example.txt >example.txt.dec
 Password:
 # view the result
@@ -33,63 +40,48 @@ For more information run:
 ```bash
 git clone https://github.com/jlinoff/pam-crypt.git
 cd pam-crypt
-./pam-crypt --help   # to see the program help
-./pam_decrypt --help # to see the program help
+./pam-crypt --help   # to see the old program help
+pipenv run ./pam_decode.py --help # to see the PAMv2 decode program help
+pipenv run ./pam_encode.py --help # to see the PAMv2 encode program help
+make help
 ```
 
-### Lint and test
-```bash
-make lint
-make test
-```
+## Usage Examples
 
-## Install
-```bash
-git clone https://github.com/jlinoff/pam-crypt.git
-cd pam-crypt
-make
-make install
-```
+These are some simple usage example that show to use these tools.
 
-## Uninstall
+### Create an Encrypted Example File
+
+This shows how to create an encrypted file that can be read by PAM
+from a plaintext JSON file.
 
 ```bash
-make uninstall
+PAM_PASSWORD='example' ./pam_encode.py example.txt > example.enc.txt
 ```
 
-## Errata
+### Report Passwords for Each Record
 
-`jq` analysis ideas.
+This simple report outputs the record title and the passsword for the example data.
 
-
-### various random ideas
 ```bash
-./pam-crypt -d -P example -i mystuff.txt |\
-    jq '.records[] | objects | .fields[] | "\(.name):, \(.value)"'
-
-./pam-crypt -d -P example -i mystuff.txt |\
-    jq '.records[] | objects | .fields[] | select(.type=="password") | "password: \(.value)"'
-
-./pam-crypt -d -P example -i mystuff.txt |\
-    jq '.records[] | objects | [.fields[] | select(.type=="password") | "password: \(.value)"]'
-
-./pam-crypt -d -P example -i mystuff.txt |\
-    jq '.records[] | objects | ["title: \(.title)", ( .fields[] | select(.type=="password") | "password: \(.value)")]'
-
-./pam-crypt -d -P example -i mystuff.txt |\
-    jq '.records[] | objects | [( .fields[] | select(.type=="password") | "password: \(.value)"), "title: \(.title)"]'  -c | \
-    rg '^."password:.' | sort -f
-
-./pam-crypt -d -P example -i mystuff.txt |\
-    jq '.records[] | objects | [( .fields[] | select(.name=="password") | "p: \(.value)"), "  ::: \(.title)"]'  -c | rg '^."p:' | \
-    sort -f | column -s ':::' -t
+% head -1 example1.txt| cut -c -16
+PAMv2:BNG1ubM7G2
+% PAM_PASSWORD='example1' ./pam_decode.py example1.txt | jq -S -r '.records[] | objects | . as $r | .fields[] | select(.name=="password") | "\($r.title) ::: \(.value)"' | column -t -s ':::'
+Amazon                           hr5Hn9pqm3u.VqMiALfdN-"
+Email pbrain22@protonmail.com    rHfZ6bihw$g8ra$P4hHD
+Facebook                         dOa#DirgJge67okTKtEzp.LSl
+GitHub                           Aq7GdcOmYWVkyHEWEk6fBeJzm
+Google                           NIJMeb8OfXEfshOG$db!
+Instagram                        dOa#DirgJge67okTKtEzp.LSl
+Netflix                          cGwJ$NPQ4SsI#haEsFRD
+StackExchange (StackOverflow)    FpnzQcuq0nk/PxlMdYJ_itnK
+Toys-R-Us                        wUq7!vTm2$eLxR9dNc4A
 ```
 
-### table of passwords and titles
-```
-$ ./pam-crypt -d -P example -i example.txt | \
-   jq '.records[] | objects | [( .fields[] | select(.name=="password") | "p: \(.value)"), "  ::: \(.title)"]'  -c | rg '^."p:' | \
-   sort -f | column -s ':::' -t
-```
+### Diff two files using meld
 
-# document how i created the favicon
+This is quite useful when looking for differences.
+
+```bash
+meld <(PAM_PASSWORD=example1 ./pam_decode.py example1.txt) <(PAM_PASSWORD=example2 ./pam_decode.py example2.txt)
+```
