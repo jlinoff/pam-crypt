@@ -53,7 +53,7 @@ make help            # list the make targets
 | `pam_encode.py` | v2 | Encrypt JSON back into a vault. |
 | `pam-diff.sh` | v2 | Compare two vaults, decrypting only into a private temporary directory. |
 | `pam-crypt` | **v1 only** | The original Node tool. Superseded — see below. |
-| `pam-vault-diff.html` | v2 | Web page that allows two vaults to be diff'ed. It also allows a record to be merged. |
+| `pam-vault-diff.html` | v2 | Web page that allows two vaults to be diff'ed. It also allows a record one record to be copied from one vault to the other. |
 
 **`pam-crypt` is for old files only.** PAM v1 predates April 2026 and used a
 weaker key derivation. If you still have v1 vaults, the better move is to load
@@ -70,7 +70,7 @@ python -m http.server 9001
 
 Then navigate to `http://localhost:9001` to enter the PAM vaults to be compared.
 The interface is very simple, you enter the names of the two vaults and their
-respective passwords, you then choose diff (the default) or merge and then proceed.
+respective passwords, you then choose diff (the default) or copy.
 
 It looks like this:
 
