@@ -66,8 +66,8 @@ lint:  ## Lint javascript, python and shellscripts.
 	@echo "$@ PASSED"
 
 .PHONY: webtest
-webtest:  ## Serve the pam-vault-diff.html web tool locally to diff vaults or copy records.
-	./webtest.sh
+webtest:  ## Serve the pam-vault-diff.html web tool on localhost.
+	./webtest.sh pam-vault-diff.html
 
 .PHONY: zip
 zip:  project.zip  ## Make the project.zip file from git repo contents.
