@@ -2,8 +2,10 @@
 
 [![Release](https://img.shields.io/github/release/jlinoff/pam-crypt?style)](https://github.com/jlinoff/pam-crypt/releases)
 
-Command-line tools for [PAM](https://github.com/jlinoff/pam) vault files. They
-let you read, rewrite and compare vaults with ordinary Unix tools — `jq`,
+Command-line (CLI) tools for [PAM](https://github.com/jlinoff/pam) vault files
+as well as a webtool  (`pam-vault-diff.html`) for diff'ing and merging records
+in PAM vaults.
+The CLI tools let you read, rewrite and compare vaults with ordinary Unix tools — `jq`,
 `diff`, `meld`, an editor, a shell pipeline — rather than through the browser.
 
 They also demonstrate something worth knowing about PAM: the file format is
