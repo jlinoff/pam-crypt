@@ -57,11 +57,12 @@ test-pamv2: | example.txt
 	@rm -f $@.*
 
 .PHONY: lint
-lint:  ## Run jshint to lint the old javascript tool.
+lint:  ## Lint javascript, python and shellscripts.
 	@$(TARGET) $@
 	jshint --config jshint.json pam-crypt
 	pipenv run pylint pam_decode.py
 	pipenv run pylint pam_encode.py
+	shellcheck pam-vault-diff.sh
 	@echo "$@ PASSED"
 
 .PHONY: web
