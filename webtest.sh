@@ -27,7 +27,7 @@
 set -euo pipefail
 
 PORT="${PORT:-9002}"
-PAGE="${1:-${PAGE:-pam-vault-diff.html}}"
+PAGE="${1:-${PAGE:-www/index.html}}"
 URL="http://localhost:${PORT}/${PAGE#/}"
 
 if [ ! -f "$PAGE" ] ; then
@@ -119,11 +119,11 @@ printf '\033[0m'
 
 if BROWSER_BIN="$(find_browser)" ; then
     PROFILE="$(mktemp -d "${TMPDIR:-/tmp}/pam-serve.XXXXXXXX")"
-#    "$BROWSER_BIN" \
-#        --user-data-dir="$PROFILE" \
-#        --no-first-run \
-#        --no-default-browser-check \
-#        --new-window "$URL" >/dev/null 2>&1 &
+##    "$BROWSER_BIN" \
+##        --user-data-dir="$PROFILE" \
+##        --no-first-run \
+##        --no-default-browser-check \
+##        --new-window "$URL" >/dev/null 2>&1 &
     "$BROWSER_BIN" \
         --user-data-dir="$PROFILE" \
         --no-first-run \
@@ -133,7 +133,7 @@ if BROWSER_BIN="$(find_browser)" ; then
     BROWSER=$!
     printf '\033[1;35m'
     echo "browser  : pid ${BROWSER} ($(basename "$BROWSER_BIN"))"
-    echo "press Ctrl-C, or close the browser window"
+    echo "press Ctrl-C, or quit the browser with Command-Q to stop"
     printf '\033[0m'
 
     # Poll rather than `wait -n`: macOS ships bash 3.2, where `wait -n` does
