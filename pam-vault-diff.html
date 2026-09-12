@@ -93,6 +93,9 @@
           font-size: .95rem; font-family: inherit;
       }
       input[type=file] { padding: .4rem; }
+      .input-with-clear { display: grid; grid-template-columns: minmax(0, 1fr) auto;
+                          gap: .5rem; align-items: center; }
+      .input-with-clear button { padding: .5rem .75rem; }
       button {
           background: var(--accent); color: #08111f; border: 0; border-radius: 5px;
           padding: .6rem 1.4rem; font-size: .95rem; font-weight: 600; cursor: pointer;
@@ -141,20 +144,36 @@
         <div class="vault">
           <div>
             <label for="f1">Vault 1</label>
-            <input type="file" id="f1">
+            <div class="input-with-clear">
+              <input type="file" id="f1">
+              <button type="button" class="secondary clear-input" data-target="f1"
+                      aria-label="Clear vault 1 file">Clear</button>
+            </div>
             <label for="p1">Password for vault 1</label>
-            <input type="password" id="p1" autocomplete="off"
-                   placeholder="leave blank if unencrypted">
+            <div class="input-with-clear">
+              <input type="password" id="p1" autocomplete="new-password"
+                     placeholder="leave blank if unencrypted">
+              <button type="button" class="secondary clear-input" data-target="p1"
+                      aria-label="Clear password for vault 1">Clear</button>
+            </div>
             <label class="showpw" for="showp1">
               <input type="checkbox" id="showp1"> Show password
             </label>
           </div>
           <div>
             <label for="f2">Vault 2</label>
-            <input type="file" id="f2">
+            <div class="input-with-clear">
+              <input type="file" id="f2">
+              <button type="button" class="secondary clear-input" data-target="f2"
+                      aria-label="Clear vault 2 file">Clear</button>
+            </div>
             <label for="p2">Password for vault 2</label>
-            <input type="password" id="p2" autocomplete="off"
-                   placeholder="leave blank if unencrypted">
+            <div class="input-with-clear">
+              <input type="password" id="p2" autocomplete="new-password"
+                     placeholder="leave blank if unencrypted">
+              <button type="button" class="secondary clear-input" data-target="p2"
+                      aria-label="Clear password for vault 2">Clear</button>
+            </div>
             <label class="showpw" for="showp2">
               <input type="checkbox" id="showp2"> Show password
             </label>
@@ -169,16 +188,24 @@
 
         <div id="copyopts" style="display:none">
           <label for="title">Exact record title to copy from vault 1</label>
-          <input type="text" id="title" autocomplete="off"
-                 placeholder="e.g. Amazon">
+          <div class="input-with-clear">
+            <input type="text" id="title" autocomplete="off"
+                   placeholder="e.g. Amazon">
+            <button type="button" class="secondary clear-input" data-target="title"
+                    aria-label="Clear record title">Clear</button>
+          </div>
           <p class="hint">
             Titles are unique within a PAM vault and are matched exactly, including
             case. If vault 2 already has a record with this title, you will be asked
             which to keep.
           </p>
           <label for="outpw">Password for the new vault 2</label>
-          <input type="password" id="outpw" autocomplete="off"
-                 placeholder="leave blank to write unencrypted JSON">
+          <div class="input-with-clear">
+            <input type="password" id="outpw" autocomplete="new-password"
+                   placeholder="leave blank to write unencrypted JSON">
+            <button type="button" class="secondary clear-input" data-target="outpw"
+                    aria-label="Clear password for the new vault 2">Clear</button>
+          </div>
           <label class="showpw" for="showoutpw">
             <input type="checkbox" id="showoutpw"> Show password
           </label>
@@ -430,6 +457,24 @@
         wirePasswordReveal('p1', 'showp1')
         wirePasswordReveal('p2', 'showp2')
         wirePasswordReveal('outpw', 'showoutpw')
+
+        document.querySelectorAll('.clear-input').forEach((button) => {
+            button.addEventListener('click', () => {
+                const input = $(button.dataset.target)
+                input.value = ''
+
+                // Clearing a password also restores its concealed state.
+                if (['p1', 'p2', 'outpw'].includes(input.id)) {
+                    const checkbox = $({p1: 'showp1', p2: 'showp2', outpw: 'showoutpw'}[input.id])
+                    checkbox.checked = false
+                    input.type = 'password'
+                }
+
+                input.dispatchEvent(new Event('input', {bubbles: true}))
+                input.dispatchEvent(new Event('change', {bubbles: true}))
+                input.focus()
+            })
+        })
 
         function refresh() {
             const copying = $('op').value === 'copy'
