@@ -60,7 +60,7 @@ jobs:
         # saying so.
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: install-python-dependencies
         # The previous workflow never did this. `make all` calls
