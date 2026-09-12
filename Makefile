@@ -62,12 +62,12 @@ lint:  ## Lint javascript, python and shellscripts.
 	jshint --config jshint.json pam-crypt
 	pipenv run pylint pam_decode.py
 	pipenv run pylint pam_encode.py
-	shellcheck pam-vault-diff.sh
+	shellcheck webtest.sh
 	@echo "$@ PASSED"
 
 .PHONY: webtest
 webtest:  ## Serve the pam-vault-diff.html web tool locally to diff vaults or copy records.
-	./pam-vault-diff.sh
+	./webtest.sh
 
 .PHONY: zip
 zip:  project.zip  ## Make the project.zip file from git repo contents.
