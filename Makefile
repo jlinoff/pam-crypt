@@ -65,8 +65,8 @@ lint:  ## Lint javascript, python and shellscripts.
 	shellcheck pam-vault-diff.sh
 	@echo "$@ PASSED"
 
-.PHONY: web
-web:  ## Serve the pam-vault-diff.html web tool to diff vaults or copy records.
+.PHONY: webtest
+webtest:  ## Serve the pam-vault-diff.html web tool locally to diff vaults or copy records.
 	./pam-vault-diff.sh
 
 .PHONY: zip

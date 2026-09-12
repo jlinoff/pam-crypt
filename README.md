@@ -63,7 +63,7 @@ Node tool is kept so that existing v1 files remain readable.
 
 ## Web tool
 
-If you are on MacOSX you can simply run `make web`
+If you are on MacOSX you can simply run `make webtest`
 serve the web page.
 
 To run the web tool manually, first start a server:
@@ -292,7 +292,7 @@ make setup    # install the npm dependencies used by the v1 tool
 make lint     # jshint on pam-crypt, pylint on the Python tools
 make test     # round-trip v1 and v2: encrypt, decrypt, compare against the source
 make all      # setup, lint, test
-make web      # serve the pam-vault-diff.html web tool to diff vaults or copy records
+make webtest  # serve the pam-vault-diff.html web tool to diff vaults or copy records
 ```
 
 `make test` is a round-trip check: it encrypts `example.txt`, decrypts the
