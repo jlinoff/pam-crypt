@@ -63,8 +63,8 @@ Node tool is kept so that existing v1 files remain readable.
 
 ## Web tool
 
-If you are on MacOSX you can simply run `pam-vault-diff.sh` to
-server the web page.
+If you are on MacOSX you can simply run `make web`
+serve the web page.
 
 To run the web tool manually, first start a server:
 
@@ -72,7 +72,8 @@ To run the web tool manually, first start a server:
 python -m http.server 9001
 ```
 
-Then navigate to `http://localhost:9001` to enter the PAM vaults to be compared.
+Then navigate to `http://localhost:9001/pam-vault-diff.html` to serve
+the web page.
 The interface is very simple, you enter the names of the two vaults and their
 respective passwords, you then choose diff (the default) or copy.
 

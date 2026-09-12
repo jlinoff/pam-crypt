@@ -64,6 +64,9 @@ lint:  ## Run jshint to lint the old javascript tool.
 	pipenv run pylint pam_encode.py
 	@echo "$@ PASSED"
 
+.PHONY: web
+web:  ## Server the pam-vault-diff.html web page.
+	./pam-vault-diff.sh
 
 .PHONY: zip
 zip:  project.zip  ## Make the project.zip file from git repo contents.
