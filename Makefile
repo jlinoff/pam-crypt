@@ -65,7 +65,7 @@ lint:  ## Run jshint to lint the old javascript tool.
 	@echo "$@ PASSED"
 
 .PHONY: web
-web:  ## Server the pam-vault-diff.html web page.
+web:  ## Serve the pam-vault-diff.html web tool to diff vaults or copy records.
 	./pam-vault-diff.sh
 
 .PHONY: zip
