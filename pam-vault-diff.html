@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PAM Vault Diff and Copy</title>
+
+    <!--
+        A standalone tool for comparing two PAM vaults, and for copying a single
+        record from one into the other.
+
+        WHY THIS EXISTS, given that pam-crypt already does this from a shell.
+
+        The command line is better for most of this: meld, diff, jq and git diff are
+        mature, and process substitution keeps plaintext out of the filesystem
+        entirely. Two things it cannot do:
+
+        1. Run on a tablet or a phone. There is no shell there, and PAM is a PWA
+        that runs there perfectly well.
+
+        2. Compare without disclosing. pam_decode.py hands the whole vault to the
+        terminal in the clear. This tool reports THAT two passwords differ and
+        never shows either value — which is what you want when comparing a
+        vault you only half trust, or when someone is looking over your
+        shoulder.
+
+        DESIGN CONSTRAINTS, deliberately matching PAM itself.
+
+        - One file. No build step, no dependencies, no imports. Open it from the
+        filesystem or serve it; either works. You can read the whole thing.
+        - No network. The Content-Security-Policy below permits no connections at
+        all, which is stricter than PAM's own policy: PAM needs api.pwnedpasswords
+        for breach checking, and this needs nothing.
+        - Secrets are never rendered. Password values are compared by hash and
+        reported as same or different. The only exception is the copied record
+        itself, which necessarily carries its values into the output vault.
+        - Nothing is written anywhere except a file you explicitly download.
+
+        FORMAT SUPPORT. Read from www/js/crypt.js in the PAM repository:
+
+        v2    "PAMv2:" + base64(salt[16] || iv[16] || ciphertext)
+        PBKDF2-SHA256, 600000 iterations, AES-256-CBC
+        v1    base64(salt[16] || iv[16] || ciphertext)
+        PBKDF2-SHA256, 100000 iterations, AES-256-CBC
+        the plaintext may itself be base64 — v1 did that inconsistently
+        plain a vault saved with an empty password is JSON starting with '{'
+
+        Writing always produces v2. v1 is read-only on purpose: it exists so old
+        vaults remain openable, not so new ones can be created in a superseded format.
+      -->
+
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'none';
+                   style-src 'unsafe-inline';
+                   script-src 'unsafe-inline';
+                   img-src 'none';
+                   connect-src 'none';
+                   form-action 'none';
+                   base-uri 'none'">
+
+    <style>
+      :root {
+          --bg: #14161a;
+          --panel: #1c1f26;
+          --line: #2e3440;
+          --fg: #dfe3ea;
+          --dim: #9aa3b2;
+          --accent: #4d9dff;
+          --add: #4ec27f;
+          --del: #e06c75;
+          --warn: #e5c07b;
+      }
+      * { box-sizing: border-box; }
+      body {
+          margin: 0; padding: 1.5rem;
+          background: var(--bg); color: var(--fg);
+          font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      main { max-width: 60rem; margin: 0 auto; }
+      h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
+      h2 { font-size: 1.05rem; margin: 1.75rem 0 .6rem; color: var(--dim);
+           text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+      .sub { color: var(--dim); margin: 0 0 1.25rem; }
+      .panel { background: var(--panel); border: 1px solid var(--line);
+               border-radius: 8px; padding: 1rem 1.1rem; margin-bottom: 1rem; }
+      .vault { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+      @media (max-width: 40rem) { .vault { grid-template-columns: 1fr; } }
+      label { display: block; font-size: .85rem; color: var(--dim);
+              margin: .65rem 0 .25rem; }
+      input[type=file], input[type=password], input[type=text], select {
+          width: 100%; padding: .5rem .6rem; background: #11131a;
+          color: var(--fg); border: 1px solid var(--line); border-radius: 5px;
+          font-size: .95rem; font-family: inherit;
+      }
+      input[type=file] { padding: .4rem; }
+      button {
+          background: var(--accent); color: #08111f; border: 0; border-radius: 5px;
+          padding: .6rem 1.4rem; font-size: .95rem; font-weight: 600; cursor: pointer;
+      }
+      button:disabled { background: #3a4150; color: var(--dim); cursor: not-allowed; }
+      button.secondary { background: #333a48; color: var(--fg); }
+      .row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+      .warn { border-left: 3px solid var(--warn); padding-left: .85rem;
+              color: var(--warn); font-size: .9rem; margin: .5rem 0 0; }
+      .status { margin-top: .9rem; font-size: .9rem; color: var(--dim);
+                min-height: 1.2rem; }
+      .status.err { color: var(--del); }
+      #report { display: none; }
+      table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+      th, td { text-align: left; padding: .4rem .6rem;
+               border-bottom: 1px solid var(--line); vertical-align: top; }
+      th { color: var(--dim); font-weight: 600; font-size: .8rem;
+           text-transform: uppercase; letter-spacing: .04em; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+              font-size: .88rem; }
+      .tag { display: inline-block; padding: .1rem .45rem; border-radius: 3px;
+             font-size: .75rem; font-weight: 700; letter-spacing: .03em; }
+      .tag.only1 { background: #4a2b30; color: var(--del); }
+      .tag.only2 { background: #23402f; color: var(--add); }
+      .tag.diff  { background: #4a3f24; color: var(--warn); }
+      .tag.same  { background: #2a2f3a; color: var(--dim); }
+      .hint { color: var(--dim); font-size: .85rem; margin-top: .35rem; }
+      .showpw { display: inline-flex; align-items: center; gap: .4rem; margin: .35rem 0 0;
+                color: var(--dim); font-size: .85rem; cursor: pointer; }
+      .showpw input { margin: 0; }
+      .count { color: var(--dim); font-size: .9rem; margin: .4rem 0 .9rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+
+      <h1>PAM Vault Diff and Copy</h1>
+      <p class="sub">
+        Compare two vaults, or copy one record from the first into the second.
+        Everything happens in this page. Nothing is uploaded, and this page cannot
+        reach the network &mdash; see the <code>Content-Security-Policy</code> in the
+        source.
+      </p>
+
+      <div class="panel">
+        <div class="vault">
+          <div>
+            <label for="f1">Vault 1</label>
+            <input type="file" id="f1">
+            <label for="p1">Password for vault 1</label>
+            <input type="password" id="p1" autocomplete="off"
+                   placeholder="leave blank if unencrypted">
+            <label class="showpw" for="showp1">
+              <input type="checkbox" id="showp1"> Show password
+            </label>
+          </div>
+          <div>
+            <label for="f2">Vault 2</label>
+            <input type="file" id="f2">
+            <label for="p2">Password for vault 2</label>
+            <input type="password" id="p2" autocomplete="off"
+                   placeholder="leave blank if unencrypted">
+            <label class="showpw" for="showp2">
+              <input type="checkbox" id="showp2"> Show password
+            </label>
+          </div>
+        </div>
+
+        <label for="op">Operation</label>
+        <select id="op">
+          <option value="diff">Diff &mdash; what differs between the two vaults</option>
+          <option value="copy">Copy &mdash; take one record from vault 1 into vault 2</option>
+        </select>
+
+        <div id="copyopts" style="display:none">
+          <label for="title">Exact record title to copy from vault 1</label>
+          <input type="text" id="title" autocomplete="off"
+                 placeholder="e.g. Amazon">
+          <p class="hint">
+            Titles are unique within a PAM vault and are matched exactly, including
+            case. If vault 2 already has a record with this title, you will be asked
+            which to keep.
+          </p>
+          <label for="outpw">Password for the new vault 2</label>
+          <input type="password" id="outpw" autocomplete="off"
+                 placeholder="leave blank to write unencrypted JSON">
+          <label class="showpw" for="showoutpw">
+            <input type="checkbox" id="showoutpw"> Show password
+          </label>
+          <p class="warn" id="plainwarn" style="display:none">
+            With no password the result is written as plaintext JSON &mdash; readable
+            by anyone and by any program. Delete it when you are done.
+          </p>
+        </div>
+
+        <div class="row" style="margin-top:1.1rem">
+          <button id="go" disabled>Run</button>
+          <span class="status" id="status"></span>
+        </div>
+      </div>
+
+      <div class="panel" id="report"></div>
+
+      <script>
+        'use strict'
+
+        // ---------------------------------------------------------------------------
+        // Crypto. Transcribed from www/js/crypt.js so the two agree exactly; the
+        // constants are the part that must not drift.
+        // ---------------------------------------------------------------------------
+
+        const V2_PREFIX = 'PAMv2:'
+        const ITER_V1 = 100000   // do not change: fixed by files already written
+        const ITER_V2 = 600000   // NIST SP 800-132 / OWASP 2023
+
+        const enc = new TextEncoder()
+        const dec = new TextDecoder()
+
+        function fromBase64(text) {
+            return Uint8Array.from(atob(text), (c) => c.charCodeAt(0))
+        }
+
+        function toBase64(bytes) {
+            let raw = ''
+            for (let i = 0; i < bytes.length; i++) { raw += String.fromCharCode(bytes[i]) }
+            return btoa(raw)
+        }
+
+        async function deriveKey(password, salt, iterations, usages) {
+            const material = await crypto.subtle.importKey(
+                'raw', enc.encode(password), {name: 'PBKDF2'}, false, ['deriveKey'])
+            return crypto.subtle.deriveKey(
+                {name: 'PBKDF2', salt: salt, iterations: iterations, hash: 'SHA-256'},
+                material, {name: 'AES-CBC', length: 256}, false, usages)
+        }
+
+        /**
+         * Decrypt a vault of any supported vintage.
+         *
+         * Dispatches the way PAM does: the PAMv2: prefix selects v2, a leading '{'
+         * means it was never encrypted, and anything else is v1.
+         */
+        async function decryptVault(text, password) {
+            const body = text.trim()
+
+            if (body.startsWith('{')) {
+                return {json: JSON.parse(body), format: 'plaintext'}
+            }
+
+            if (!password) {
+                throw new Error('this vault is encrypted, so it needs a password')
+            }
+
+            if (body.startsWith(V2_PREFIX)) {
+                const raw = fromBase64(body.slice(V2_PREFIX.length))
+                const key = await deriveKey(password, raw.slice(0, 16), ITER_V2, ['decrypt'])
+                const out = await crypto.subtle.decrypt(
+                    {name: 'AES-CBC', iv: raw.slice(16, 32)}, key, raw.slice(32))
+                return {json: JSON.parse(dec.decode(out)), format: 'v2'}
+            }
+
+            // v1. The plaintext is sometimes itself base64 — v1 was inconsistent about
+            // it — so unwrap one layer when what comes back is not already JSON.
+            const raw = fromBase64(body)
+            const key = await deriveKey(password, raw.slice(0, 16), ITER_V1, ['decrypt'])
+            const out = await crypto.subtle.decrypt(
+                {name: 'AES-CBC', iv: raw.slice(16, 32)}, key, raw.slice(32))
+            let plain = dec.decode(out)
+            if (plain[0] !== '{') { plain = dec.decode(fromBase64(plain)) }
+            return {json: JSON.parse(plain), format: 'v1'}
+        }
+
+        /** Encrypt to v2. New files are never written in v1. */
+        async function encryptV2(plaintext, password) {
+            const salt = crypto.getRandomValues(new Uint8Array(16))
+            const iv = crypto.getRandomValues(new Uint8Array(16))
+            const key = await deriveKey(password, salt, ITER_V2, ['encrypt'])
+            const out = await crypto.subtle.encrypt(
+                {name: 'AES-CBC', iv: iv}, key, enc.encode(plaintext))
+            return V2_PREFIX + toBase64(new Uint8Array(
+                [...salt, ...iv, ...new Uint8Array(out)]))
+        }
+
+        // ---------------------------------------------------------------------------
+        // Comparison.
+        //
+        // Field VALUES are never compared directly in anything that reaches the DOM.
+        // They are hashed first, and only the hashes are compared. That is what lets
+        // the report say "the password differs" without ever holding the password
+        // anywhere it could be rendered, copied or screenshotted.
+        // ---------------------------------------------------------------------------
+
+        async function sha256(text) {
+            const digest = await crypto.subtle.digest('SHA-256', enc.encode(text))
+            return Array.from(new Uint8Array(digest))
+                .map((b) => b.toString(16).padStart(2, '0')).join('')
+        }
+
+        /** A record reduced to names and value hashes. No values survive. */
+        async function fingerprint(record) {
+            const fields = {}
+            for (const f of (record.fields || [])) {
+                fields[f.name] = {type: f.type, hash: await sha256(String(f.value))}
+            }
+            return {title: record.title, fields: fields}
+        }
+
+        function isSecret(name, type) {
+            return type === 'password' || /pass|secret|token|key/i.test(name)
+        }
+
+        async function diffVaults(a, b) {
+            const fa = new Map(), fb = new Map()
+            for (const r of (a.records || [])) { fa.set(r.title, await fingerprint(r)) }
+            for (const r of (b.records || [])) { fb.set(r.title, await fingerprint(r)) }
+
+            const rows = []
+            for (const [title, ra] of fa) {
+                if (!fb.has(title)) { rows.push({title: title, state: 'only1'}); continue }
+                const rb = fb.get(title)
+                const names = new Set([...Object.keys(ra.fields), ...Object.keys(rb.fields)])
+                const changes = []
+                for (const name of names) {
+                    const x = ra.fields[name], y = rb.fields[name]
+                    if (!y) { changes.push({name: name, what: 'only in vault 1'}); continue }
+                    if (!x) { changes.push({name: name, what: 'only in vault 2'}); continue }
+                    if (x.hash !== y.hash) {
+                        // The wording is the point: it reports THAT it differs.
+                        changes.push({
+                            name: name,
+                            what: isSecret(name, x.type) ? 'differs (value not shown)' : 'differs'
+                        })
+                    }
+                }
+                rows.push({title: title, state: changes.length ? 'diff' : 'same',
+                           changes: changes})
+            }
+            for (const [title] of fb) {
+                if (!fa.has(title)) { rows.push({title: title, state: 'only2'}) }
+            }
+            rows.sort((p, q) => p.title.localeCompare(q.title))
+            return rows
+        }
+
+        // ---------------------------------------------------------------------------
+        // Rendering. textContent everywhere, never innerHTML with vault data: a record
+        // title is arbitrary user text and this page must not execute it.
+        // ---------------------------------------------------------------------------
+
+        const $ = (id) => document.getElementById(id)
+
+        function el(tag, cls, text) {
+            const node = document.createElement(tag)
+            if (cls) { node.className = cls }
+            if (text !== undefined) { node.textContent = text }
+            return node
+        }
+
+        function renderDiff(rows, meta) {
+            const out = $('report')
+            out.textContent = ''
+            out.style.display = 'block'
+            out.appendChild(el('h2', null, 'Diff'))
+
+            const counts = {only1: 0, only2: 0, diff: 0, same: 0}
+            rows.forEach((r) => { counts[r.state]++ })
+            out.appendChild(el('p', 'count',
+                               `${counts.same} identical, ${counts.diff} differing, ` +
+                               `${counts.only1} only in vault 1, ${counts.only2} only in vault 2 ` +
+                               `(vault 1: ${meta.f1}, vault 2: ${meta.f2})`))
+
+            const table = el('table')
+            const head = el('tr')
+            ;['Record', 'State', 'Details'].forEach((h) => head.appendChild(el('th', null, h)))
+            table.appendChild(head)
+
+            const label = {only1: 'ONLY IN 1', only2: 'ONLY IN 2',
+                           diff: 'DIFFERS', same: 'same'}
+            for (const row of rows) {
+                if (row.state === 'same') { continue }
+                const tr = el('tr')
+                tr.appendChild(el('td', 'mono', row.title))
+                const td = el('td')
+                td.appendChild(el('span', 'tag ' + row.state, label[row.state]))
+                tr.appendChild(td)
+                const detail = el('td')
+                if (row.changes && row.changes.length) {
+                    row.changes.forEach((c) => {
+                        detail.appendChild(el('div', null, `${c.name}: ${c.what}`))
+                    })
+                } else {
+                    detail.appendChild(el('span', 'hint', '\u2014'))
+                }
+                tr.appendChild(detail)
+                table.appendChild(tr)
+            }
+
+            if (counts.only1 + counts.only2 + counts.diff === 0) {
+                out.appendChild(el('p', null, 'The two vaults hold the same records with the same values.'))
+            } else {
+                out.appendChild(table)
+                out.appendChild(el('p', 'hint',
+                                   'Values are compared by hash. Differing secrets are reported as ' +
+                                   'differing and are never displayed.'))
+            }
+        }
+
+        function download(name, text) {
+            const blob = new Blob([text], {type: 'application/octet-stream'})
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = name
+            a.click()
+            // Revoke promptly: the blob holds decrypted vault content in memory.
+            setTimeout(() => URL.revokeObjectURL(url), 1000)
+        }
+
+        // ---------------------------------------------------------------------------
+        // Wiring.
+        // ---------------------------------------------------------------------------
+
+        function say(text, isError) {
+            const s = $('status')
+            s.textContent = text || ''
+            s.className = 'status' + (isError ? ' err' : '')
+        }
+
+        function wirePasswordReveal(inputId, checkboxId) {
+            $(checkboxId).addEventListener('change', () => {
+                $(inputId).type = $(checkboxId).checked ? 'text' : 'password'
+            })
+        }
+
+        wirePasswordReveal('p1', 'showp1')
+        wirePasswordReveal('p2', 'showp2')
+        wirePasswordReveal('outpw', 'showoutpw')
+
+        function refresh() {
+            const copying = $('op').value === 'copy'
+            $('copyopts').style.display = copying ? 'block' : 'none'
+            $('plainwarn').style.display = (copying && !$('outpw').value) ? 'block' : 'none'
+            $('go').disabled = !($('f1').files.length && $('f2').files.length)
+        }
+
+        ;['f1', 'f2', 'op', 'outpw'].forEach((id) => {
+            $(id).addEventListener('change', refresh)
+            $(id).addEventListener('input', refresh)
+        })
+
+        function readFile(input) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader()
+                reader.onload = () => resolve(reader.result)
+                reader.onerror = () => reject(new Error(`could not read ${input.files[0].name}`))
+                reader.readAsText(input.files[0])
+            })
+        }
+
+        async function load(fileInput, pwInput, which) {
+            const text = await readFile(fileInput)
+            try {
+                return await decryptVault(text, pwInput.value)
+            } catch (exc) {
+                // A wrong password and a damaged file are genuinely indistinguishable
+                // here, for the same reason they are in PAM: AES-CBC has no
+                // authentication tag. Say both rather than guessing.
+                throw new Error(
+                    `could not read vault ${which} (${fileInput.files[0].name}): ` +
+                        'the password may be wrong, or the file may not be a PAM vault')
+            }
+        }
+
+        $('go').addEventListener('click', async () => {
+            $('go').disabled = true
+            $('report').style.display = 'none'
+            say('reading\u2026')
+            try {
+                const v1 = await load($('f1'), $('p1'), '1')
+                const v2 = await load($('f2'), $('p2'), '2')
+
+                if ($('op').value === 'diff') {
+                    say('comparing\u2026')
+                    const rows = await diffVaults(v1.json, v2.json)
+                    renderDiff(rows, {f1: v1.format, f2: v2.format})
+                    say(`compared ${(v1.json.records || []).length} against ` +
+                        `${(v2.json.records || []).length} records`)
+                    return
+                }
+
+                // copy
+                const title = $('title').value.trim()
+                if (!title) { throw new Error('enter the exact title of the record to copy') }
+
+                const source = (v1.json.records || []).find((r) => r.title === title)
+                if (!source) {
+                    throw new Error(`vault 1 has no record titled "${title}" ` +
+                                    '(titles are matched exactly, including case)')
+                }
+
+                const target = JSON.parse(JSON.stringify(v2.json))
+                target.records = target.records || []
+                const clash = target.records.findIndex((r) => r.title === title)
+                if (clash >= 0) {
+                    const replace = confirm(
+                        `Vault 2 already has a record titled "${title}".\n\n` +
+                            'OK replaces it with the copy from vault 1.\n' +
+                            'Cancel abandons the copy.\n\n' +
+                            'PAM requires titles to be unique, so the two cannot both be kept ' +
+                            'under this name.')
+                    if (!replace) { say('cancelled; nothing was written'); return }
+                    target.records[clash] = JSON.parse(JSON.stringify(source))
+                } else {
+                    target.records.push(JSON.parse(JSON.stringify(source)))
+                }
+
+                // Stamp the save the way PAM does, and drop any integrity digest: the
+                // content has changed, so a digest carried over from the source file would
+                // be wrong, and PAM v2.5.0 would refuse the result.
+                target.meta = target.meta || {}
+                target.meta['date-saved'] = new Date().toISOString()
+                delete target.meta.integrity
+
+                const json = JSON.stringify(target)
+                const pw = $('outpw').value
+                const body = pw ? await encryptV2(json, pw) : json
+                const name = $('f2').files[0].name.replace(/(\.[^.]*)?$/, '-merged$1')
+                download(name, body)
+                say(`copied "${title}" into ${target.records.length} records; ` +
+                    `downloaded ${name}${pw ? '' : ' (PLAINTEXT)'}`)
+            } catch (exc) {
+                say(exc.message, true)
+            } finally {
+                refresh()
+            }
+        })
+
+        refresh()
+      </script>
+    </main>
+  </body>
+</html>
